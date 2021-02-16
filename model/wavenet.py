@@ -89,7 +89,6 @@ class WaveNet(tf.keras.Model):
                 filters=configs['quantization_channels'],
                 kernel_size=1,
                 padding='same',
-                activation='relu',
                 name=final_layer_name
             )(out)
             out = tf.keras.layers.Softmax()(out)
@@ -98,11 +97,10 @@ class WaveNet(tf.keras.Model):
                 filters=1,
                 kernel_size=1,
                 padding='same',
-                activation='relu',
                 name=final_layer_name
             )(out)
 
-        model = tf.keras.Model(input_audio, out)
+        model = tf.keras.Model(input_audio, out, name='WaveNet')
         model.summary()
         return model
 
