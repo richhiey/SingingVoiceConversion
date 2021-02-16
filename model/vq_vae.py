@@ -16,7 +16,9 @@ class VectorQuantizer(tf.keras.layers.Layer):
     
     def build(self, input_shape):
         rand_init = tf.keras.initializers.VarianceScaling(distribution="uniform")
-        self.codebook = self.add_weight(shape=(self.k, self.d), initializer=rand_init, trainable=True)
+        self.codebook = self.add_weight(
+        	shape=(self.k, self.d), initializer=rand_init, trainable=True, name='Codebook'
+        )
         
     def call(self, inputs):
         # Map z_e of shape (b, w,, h, d) to indices in the codebook
@@ -58,12 +60,18 @@ class VQ_VAE(tf.keras.Model):
 		encoded = self.conv_encoder(input_audio)
 		# Pre-VQ step
 		# - (batch, m, latent size)
-		encoded = tf.keras.layers.Conv1D(configs['latent_dim'], 1, name='Pre-VQ-conv')(encoded)
+		z_e = tf.keras.layers.Conv1D(configs['latent_dim'], 1, name='Pre-VQ-conv')(encoded)
 		# Vector quantization
 		# - (batch, m, latent size)
-		vq = self.vector_quantizer(encoded)
+		z_q = self.vector_quantizer(encoded)
+    	straight_through = tf.keras.layers.Lambda(
+    		lambda x : x[1] + tf.stop_gradient(x[0] - x[1]),
+    		name="straight_through_estimator"
+    	)
+    	vq = straight_through([z_q, z_e])
 		# Conv Decoder
 		# - (batch, sr, 1)
+
 		decoded = self.conv_decoder(vq)
 		# Wavenet Decoder
 		# - (batch, sr, 1)
