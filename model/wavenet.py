@@ -1,53 +1,107 @@
+# Implementation of original Wavenet paper
+# - https://arxiv.org/pdf/1609.03499.pdf
+
 import tensorflow as tf
 
-DEFAULT_CONFIGS = {}
+DEFAULT_CONFIGS = {
+    "filter_width": 4,
+    "sampling_rate": 16000,
+    "dilations": [
+        1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+    #    1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+     #   1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+      #  1, 2, 4, 8, 16, 32, 64, 128, 256, 512,
+       # 1, 2, 4, 8, 16, 32, 64, 128, 256, 512
+    ],
+    "residual_channels": 32,
+    "dilation_channels": 32,
+    "quantization_channels": None,
+    "skip_channels": 512,
+    "initial_filter_width": 32,
+    "initial_channels": 32
+}
+
 
 class WaveNet(tf.keras.Model):
-    def __init__(self, configs):
-        super(WaveNetPedal, self).__init__()
+    def __init__(self, configs=DEFAULT_CONFIGS):
+        super(WaveNet, self).__init__()
         self.model = self.create_model(configs)
 
 
     def create_model(self, configs):
         skips = []
-        input_audio = tf.keras.layers.Input(shape=(None, 1))
-        x = input_audio
+        input_audio = tf.keras.layers.Input(shape=(configs['sampling_rate'], 1))
 
-        for d in configs['dilation_rates']:
+        x = tf.keras.layers.Conv1D(
+            filters=configs['initial_channels'], 
+            kernel_size=configs['initial_filter_width'],
+            padding='causal',
+            activation='relu',
+            name='Initial-Causal-Convolution'
+        )(input_audio)
+
+        for i, d in enumerate(configs['dilations']):
             # preprocessing eqv. in time-distributed dense
-            x = tf.keras.layers.Conv1D(
-                16, 1, padding='same', activation='relu'
-            )(x)
             # Filter
             x_f = tf.keras.layers.Conv1D(
-                filters=configs['num_filters'],
-                kernel_size=configs['kernel_size'],
+                filters=configs['dilation_channels'],
+                kernel_size=configs['filter_width'],
                 padding='causal',
-                dilation_rate=d
+                dilation_rate=d,
+                name='Layer'+str(i)+'-Conv-Filter'
             )(x)
             # Gate
             x_g = tf.keras.layers.Conv1D(
-                filters=configs['num_filters'],
-                kernel_size=configs['kernel_size'],
+                filters=configs['dilation_channels'],
+                kernel_size=configs['filter_width'],
                 padding='causal',
-                dilation_rate=d
+                dilation_rate=d,
+                name='Layer'+str(i)+'-Conv-Gate'
             )(x)
             x_f = tf.keras.layers.Activation('tanh')(x_f)
             x_g = tf.keras.layers.Activation('sigmoid')(x_g)
             z = tf.keras.layers.Multiply()([x_f, x_g])
-            # post-processing eqv. in time-distributed dense
             z = tf.keras.layers.Conv1D(
-                16, 1, padding='same', activation='relu'                
+                filters=configs['residual_channels'],
+                kernel_size=1,
+                padding='same',
+                activation='relu',
+                name='Layer'+str(i)+'-Conv-Residual'              
             )(z)
             x = tf.keras.layers.Add()([x, z])
             skips.append(z)
 
         out = tf.keras.layers.Add()(skips)
         out = tf.keras.layers.Activation('relu')(out)
-        out = tf.keras.layers.Conv1D(128, 1, padding='same')(out)
+        out = tf.keras.layers.Conv1D(
+            filters=configs['skip_channels'],
+            kernel_size=1,
+            padding='same',
+            activation='relu',
+            name='Conv-Skip-Channels'
+        )(out)
         out = tf.keras.layers.Activation('relu')(out)
         out = tf.keras.layers.Dropout(.2)(out)
-        out = tf.keras.layers.Conv1D(1, 1, padding='same')(out)
+        
+        final_layer_name = 'Final-Conv-Layer'
+        if configs.get('quantization_channels'):
+            out = tf.keras.layers.Conv1D(
+                filters=configs['quantization_channels'],
+                kernel_size=1,
+                padding='same',
+                activation='relu',
+                name=final_layer_name
+            )(out)
+            out = tf.keras.layers.Softmax()(out)
+        else:
+            out = tf.keras.layers.Conv1D(
+                filters=1,
+                kernel_size=1,
+                padding='same',
+                activation='relu',
+                name=final_layer_name
+            )(out)
+
         model = tf.keras.Model(input_audio, out)
         model.summary()
         return model
