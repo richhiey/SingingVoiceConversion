@@ -84,7 +84,7 @@ class VQ_VAE(tf.keras.Model):
         output = self.wavenet_decoder(decoded)
         # - (batch, sr, 1)
 
-        model = tf.keras.Model(input_audio, output)
+        model = tf.keras.Model(input_audio, [output, z_q, z_e])
         model.summary()
 
         return model

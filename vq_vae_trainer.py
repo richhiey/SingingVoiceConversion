@@ -17,7 +17,7 @@ class VQ_VAE_Trainer():
     def __init__(self, model, configs=DEFAULT_CONFIGS):
         self.model = model
         self.configs = configs
-        self.loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        self.reconstr_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         self.optimizer = tf.keras.optimizers.Adam()
         self.tensorboard_logdir = os.path.join(
             configs['model_path'],
@@ -45,10 +45,16 @@ class VQ_VAE_Trainer():
             print("Initializing from scratch.")
 
 
+    def loss_fn(self, data, outputs, z_q, z_e):
+        reconstr_loss = self.reconstr_loss(data, outputs)
+        vq_loss = tf.reduce_mean(tf.norm(tf.stop_gradient(z_e) - z_q, axis=-1) ** 2)
+        commit_loss = tf.reduce_mean(tf.norm(z_e - tf.stop_gradient(z_q), axis=-1) ** 2)
+        return reconstr_loss + vq_loss + commit_loss
+
     def train_step(self, data):
         with tf.GradientTape() as tape:
-            outputs = self.model(data)
-            loss = self.loss_fn(data, outputs)
+            outputs, z_q, z_e = self.model(data)
+            loss = self.loss_fn(data, outputs, z_q, z_e)
         grads = tape.gradient(loss, self.model.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
         return loss, outputs
@@ -60,14 +66,14 @@ class VQ_VAE_Trainer():
                 loss, outputs = self.train_step(data)
                 print(loss)
 
-                if i % self.configs['print_every']:
+                #if i % self.configs['print_every']:
                     ## --------------------------
                     ## TODO:
                     ## --------------------------
                     ## Some visualization
                     ## Convert to audio in juppy
                     ## Do some codebook viz
-                    print(outputs)
+                    #print(outputs)
 
 
 def mu_law_encode(x, quantization_channels=256, to_int=False, one_hot=False):

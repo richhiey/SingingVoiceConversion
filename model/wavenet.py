@@ -15,7 +15,7 @@ DEFAULT_CONFIGS = {
     ],
     "residual_channels": 32,
     "dilation_channels": 32,
-    "quantization_channels": None,
+    "quantization_channels": 256,
     "skip_channels": 512,
     "initial_filter_width": 32,
     "initial_channels": 32
