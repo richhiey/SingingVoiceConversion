@@ -1,10 +1,12 @@
 import os
 import tensorflow as tf
-
+from scipy.io.wavfile import read
 from datetime import datetime
+import numpy as np
+
 
 DEFAULT_CONFIGS = {
-    'model_path': '/home/richhiey/Desktop/workspace/projects/virtual_musicians',
+    'model_path': None,
     'learning_rate': 0.0001,
     'num_epochs': 100,
     'print_every': 100
@@ -46,14 +48,15 @@ class VQ_VAE_Trainer():
     def train_step(self, data):
         with tf.GradientTape() as tape:
             outputs = self.model(data)
-            loss = self.loss_fn(outputs, data)
-        grads = tape.gradient(loss_value, self.model.trainable_weights)
+            loss = self.loss_fn(data, outputs)
+        grads = tape.gradient(loss, self.model.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
         return loss, outputs
 
     def train(self, dataset):
         for i in range(self.configs['num_epochs']):
             for i, data in enumerate(dataset):
+                data = mu_law_encode(data, 256, True, False)
                 loss, outputs = self.train_step(data)
                 print(loss)
 
@@ -66,3 +69,32 @@ class VQ_VAE_Trainer():
                     ## Do some codebook viz
                     print(outputs)
 
+
+def mu_law_encode(x, quantization_channels=256, to_int=False, one_hot=False):
+    mu = tf.cast(quantization_channels - 1, tf.float32)
+    x = tf.clip_by_value(tf.cast(x, tf.float32), -1., 1.)
+    y = tf.sign(x) * tf.math.log1p(mu * tf.abs(x)) / tf.math.log1p(mu)
+    if to_int or one_hot:
+        # [-1, 1](float) -> (0, mu)(int); + 0.5 since tf.cast does flooring
+        y = tf.cast((y + 1) / 2 * mu + 0.5, tf.int32)
+        if one_hot:
+            y = tf.one_hot(y, depth=quantization_channels, dtype=tf.float32)
+            y = tf.squeeze(y, axis=-2)
+    print(tf.shape(y))
+    return y
+
+
+def mu_law_decode(y, quantization_channels=256):
+    mu = tf.cast(quantization_channels - 1, tf.float32)
+    # (0, mu) -> (-1, 1)
+    y = (2 * tf.cast(y, tf.float32) / mu) - 1
+    x = tf.sign(y) * ((1 + mu) ** tf.abs(y) - 1) / mu
+    return x
+
+
+def mu_law_decode_np(y, quantization_channels=256):
+    mu = np.asarray(quantization_channels - 1, dtype=np.float32)
+    # (0, mu) -> (-1, 1)
+    y = (2 * np.asarray(y, dtype=np.float32) / mu) - 1
+    x = np.sign(y) * ((1 + mu) ** abs(y) - 1) / mu
+    return x

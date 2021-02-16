@@ -62,7 +62,7 @@ class VQ_VAE(tf.keras.Model):
         z_e = tf.keras.layers.Conv1D(configs['latent_dim'], 1, name='pre-vq-conv')(encoded)
         # - (batch, m, latent size)
         # Vector quantization
-        codebook_idx = self.vector_quantizer(encoded)
+        codebook_idx = self.vector_quantizer(z_e)
         # - (batch, m)
         sampling_layer = tf.keras.layers.Lambda(
             lambda x: self.vector_quantizer.sample(x),
