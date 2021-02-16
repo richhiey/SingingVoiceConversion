@@ -5,7 +5,7 @@ DEFAULT_CONFIGS = {
 	'num_filters': 32,
 	'kernel_size': 4,
 	'strides': 2,
-	'input_channels': 32
+	'input_channels': 128
 }
 
 class ConvDecoder(tf.keras.Model):
@@ -54,8 +54,8 @@ class ConvEncoder(tf.keras.Model):
 		for i in range(configs['num_layers']):
 			x = tf.keras.layers.Conv1D(
                 filters=configs['num_filters'],
-                kernel_size=4,
-                strides=2,
+                kernel_size=configs['kernel_size'],
+                strides=configs['strides'],
                 padding='same',
                 activation='relu'
 			)(x)

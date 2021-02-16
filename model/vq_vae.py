@@ -3,8 +3,8 @@ from model.wavenet import WaveNet
 from model.conv_encoder import ConvEncoder, ConvDecoder
 
 DEFAULT_CONFIGS = {
-    'vq_size': 64,
-    'latent_dim': 32
+    'vq_size': 512,
+    'latent_dim': 128
 }
 
 

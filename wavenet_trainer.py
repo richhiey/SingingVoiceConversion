@@ -8,19 +8,19 @@ import IPython.display as ipd
 
 DEFAULT_CONFIGS = {
     'model_path': None,
-    'learning_rate': 0.001,
+    'learning_rate': 0.0001,
     'num_epochs': 100,
-    'print_every': 100,
-    'beta': 0.25
+    'print_every': 1000,
+    'save_every': 1000,
 }
 
-class VQ_VAE_Trainer():
+class WaveNet_Trainer():
 
     def __init__(self, model, configs=DEFAULT_CONFIGS):
         self.model = model
         self.configs = configs
         self.reconstr_loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        self.optimizer = tf.keras.optimizers.Adam()
+        self.optimizer = tf.keras.optimizers.Adam(configs['learning_rate'])
         self.tensorboard_logdir = os.path.join(
             configs['model_path'],
             'tensorboard',
@@ -47,16 +47,14 @@ class VQ_VAE_Trainer():
             print("Initializing from scratch.")
 
 
-    def loss_fn(self, data, outputs, z_q, z_e):
+    def loss_fn(self, data, outputs):
         reconstr_loss = self.reconstr_loss(data, outputs)
-        vq_loss = tf.reduce_mean(tf.norm(tf.stop_gradient(z_e) - z_q, axis=-1) ** 2)
-        commit_loss = tf.reduce_mean(tf.norm(z_e - tf.stop_gradient(z_q), axis=-1) ** 2)
-        return reconstr_loss + vq_loss + self.configs['beta'] * commit_loss
+        return reconstr_loss
 
     def train_step(self, data):
         with tf.GradientTape() as tape:
-            outputs, z_q, z_e = self.model(data)
-            loss = self.loss_fn(data, outputs, z_q, z_e)
+            outputs = self.model(data)
+            loss = self.loss_fn(data, outputs)
         grads = tape.gradient(loss, self.model.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
         return loss, outputs
@@ -66,9 +64,11 @@ class VQ_VAE_Trainer():
             for i, _data in enumerate(dataset):
                 data = mu_law_encode(_data, 256, True, False)
                 loss, outputs = self.train_step(data)
-                print(loss)
-
-                if i % self.configs['print_every']==0:
+                
+                self.ckpt.step.assign_add(1)
+                curr_step = int(self.ckpt.step)
+                tf.summary.scalar('Loss', loss, step=curr_step)
+                if curr_step % self.configs['print_every'] == 0:
                     ## --------------------------
                     ## TODO:
                     ## --------------------------
@@ -76,6 +76,7 @@ class VQ_VAE_Trainer():
                     ## Convert to audio in juppy
                     ## Do some codebook viz
                     # print(outputs)
+                    print(loss)
                     wav = tf.argmax(outputs, axis=-1)
                     pred = mu_law_decode_np(tf.squeeze(wav[0,...]).numpy())
                     og = mu_law_decode_np(tf.squeeze(data[0,...]).numpy())
@@ -86,6 +87,10 @@ class VQ_VAE_Trainer():
                     print('ORIGINAL:')
                     ipd.display(ipd.Audio(tf.squeeze(_data[0,...]).numpy(), rate=16000))
                     
+                if curr_step % self.configs['save_every'] == 0:
+                    self.ckpt_manager.save()
+                    print('Saved checkpoints for step: ' + str(curr_step))
+
 
 def mu_law_encode(x, quantization_channels=256, to_int=False, one_hot=False):
     mu = quantization_channels - 1
