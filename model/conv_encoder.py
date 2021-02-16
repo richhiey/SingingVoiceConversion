@@ -2,9 +2,10 @@ import tensorflow as tf
 
 DEFAULT_CONFIGS = {
 	'num_layers': 6,
-	'num_filters': 256,
+	'num_filters': 32,
 	'kernel_size': 4,
-	'strides': 2
+	'strides': 2,
+	'input_channels': 32
 }
 
 class ConvDecoder(tf.keras.Model):
@@ -14,7 +15,7 @@ class ConvDecoder(tf.keras.Model):
 		self.model = self.create_model(configs)
 
 	def create_model(self, configs):
-		encoded = tf.keras.layers.Input(shape=(None, 1))
+		encoded = tf.keras.layers.Input(shape=(None, configs['input_channels']))
 		x = encoded
 
 		for i in range(configs['num_layers']):

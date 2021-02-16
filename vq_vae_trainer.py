@@ -1,13 +1,22 @@
+import os
 import tensorflow as tf
 
-DEFAULT_CONFIGS = {}
+from datetime import datetime
+
+DEFAULT_CONFIGS = {
+    'model_path': '/home/richhiey/Desktop/workspace/projects/virtual_musicians',
+    'learning_rate': 0.0001,
+    'num_epochs': 100,
+    'print_every': 100
+}
 
 class VQ_VAE_Trainer():
 
-	def __init__(self, model, configs=DEFAULT_CONFIGS):
-		self.model = model
-		self.loss_fn = tf.keras.losses.SparseCategoricalCrossEntropy(with_logits=True)
-		self.optimizer = tf.keras.optimizers.Adam()
+    def __init__(self, model, configs=DEFAULT_CONFIGS):
+        self.model = model
+        self.configs = configs
+        self.loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        self.optimizer = tf.keras.optimizers.Adam()
         self.tensorboard_logdir = os.path.join(
             configs['model_path'],
             'tensorboard',
@@ -20,7 +29,7 @@ class VQ_VAE_Trainer():
         self.ckpt = tf.train.Checkpoint(
             step = tf.Variable(1),
             optimizer = self.optimizer,
-            net = self.model
+            net = model
         )
         self.ckpt_manager = tf.train.CheckpointManager(
             self.ckpt, 
@@ -34,26 +43,26 @@ class VQ_VAE_Trainer():
             print("Initializing from scratch.")
 
 
-	def train_step(self, data):
-		with tf.GradientTape() as tape:
-			outputs = model(data)
-			loss = self.loss_fn(outputs, data)
+    def train_step(self, data):
+        with tf.GradientTape() as tape:
+            outputs = self.model(data)
+            loss = self.loss_fn(outputs, data)
         grads = tape.gradient(loss_value, self.model.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_weights))
         return loss, outputs
 
-	def train(self, dataset):
-		for i in range(configs['num_epochs']):
-			for i, data in enumerate(dataset):
-				loss, outputs = train_step(data)
-				print(loss)
+    def train(self, dataset):
+        for i in range(self.configs['num_epochs']):
+            for i, data in enumerate(dataset):
+                loss, outputs = self.train_step(data)
+                print(loss)
 
-				if i % configs['print_every']:
-					## --------------------------
-					## TODO:
-					## --------------------------
-					## Some visualization
-					## Convert to audio in juppy
-					## Do some codebook viz
-					print(outputs)
+                if i % self.configs['print_every']:
+                    ## --------------------------
+                    ## TODO:
+                    ## --------------------------
+                    ## Some visualization
+                    ## Convert to audio in juppy
+                    ## Do some codebook viz
+                    print(outputs)
 

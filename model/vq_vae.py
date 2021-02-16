@@ -3,8 +3,8 @@ from model.wavenet import WaveNet
 from model.conv_encoder import ConvEncoder, ConvDecoder
 
 DEFAULT_CONFIGS = {
-	'vq_size': 64,
-	'latent_dim': 32
+    'vq_size': 64,
+    'latent_dim': 32
 }
 
 
@@ -17,7 +17,7 @@ class VectorQuantizer(tf.keras.layers.Layer):
     def build(self, input_shape):
         rand_init = tf.keras.initializers.VarianceScaling(distribution="uniform")
         self.codebook = self.add_weight(
-        	shape=(self.k, self.d), initializer=rand_init, trainable=True, name='Codebook'
+            shape=(self.k, self.d), initializer=rand_init, trainable=True, name='Codebook'
         )
         
     def call(self, inputs):
@@ -39,50 +39,57 @@ class VectorQuantizer(tf.keras.layers.Layer):
 
 class VQ_VAE(tf.keras.Model):
 
-	def __init__(self, configs=DEFAULT_CONFIGS):
-		super(VQ_VAE, self).__init__()
-		self.model = self.create_model(configs)
+    def __init__(self, configs=DEFAULT_CONFIGS):
+        super(VQ_VAE, self).__init__()
+        self.model = self.create_model(configs)
 
 
-	def create_model(self, configs):
-		self.conv_encoder = ConvEncoder()
-		self.wavenet_decoder = WaveNet()
-		self.conv_decoder = ConvDecoder()
-		self.vector_quantizer = VectorQuantizer(
-			configs['vq_size'],
-			configs['latent_dim']
-		)
-		# Input audio : sr = 16KHz
-		# - (batch, sr, 1)
-		input_audio = tf.keras.layers.Input(shape=(None, 1))
-		# Conv Encoder
-		# - (batch, m, 1)
-		encoded = self.conv_encoder(input_audio)
-		# Pre-VQ step
-		# - (batch, m, latent size)
-		z_e = tf.keras.layers.Conv1D(configs['latent_dim'], 1, name='Pre-VQ-conv')(encoded)
-		# Vector quantization
-		# - (batch, m, latent size)
-		z_q = self.vector_quantizer(encoded)
-    	straight_through = tf.keras.layers.Lambda(
-    		lambda x : x[1] + tf.stop_gradient(x[0] - x[1]),
-    		name="straight_through_estimator"
-    	)
-    	vq = straight_through([z_q, z_e])
-		# Conv Decoder
-		# - (batch, sr, 1)
+    def create_model(self, configs):
+        self.conv_encoder = ConvEncoder()
+        self.wavenet_decoder = WaveNet()
+        self.conv_decoder = ConvDecoder()
+        self.vector_quantizer = VectorQuantizer(
+            configs['vq_size'],
+            configs['latent_dim']
+        )
+        # Input audio : sr = 16KHz
+        input_audio = tf.keras.layers.Input(shape=(None, 1))
+        # - (batch, sr, 1)
+        # Conv Encoder
+        encoded = self.conv_encoder(input_audio)
+        # - (batch, m, 1)
+        # Pre-VQ step
+        z_e = tf.keras.layers.Conv1D(configs['latent_dim'], 1, name='pre-vq-conv')(encoded)
+        # - (batch, m, latent size)
+        # Vector quantization
+        codebook_idx = self.vector_quantizer(encoded)
+        # - (batch, m)
+        sampling_layer = tf.keras.layers.Lambda(
+            lambda x: self.vector_quantizer.sample(x),
+            name="sample_from_codebook"
+        )
+        # Replace indicies with codebook vectors
+        z_q = sampling_layer(codebook_idx)
+        # - (batch, m, latent_size)
+        # Stop gradient for vq step
+        straight_through = tf.keras.layers.Lambda(
+            lambda x : x[1] + tf.stop_gradient(x[0] - x[1]),
+            name="straight_through_estimator"
+        )
+        vq = straight_through([z_q, z_e])
+        # Conv Decoder
+        decoded = self.conv_decoder(vq)
+        # - (batch, sr, 1)
+        # Wavenet Decoder
+        output = self.wavenet_decoder(decoded)
+        # - (batch, sr, 1)
 
-		decoded = self.conv_decoder(vq)
-		# Wavenet Decoder
-		# - (batch, sr, 1)
-		output = self.wavenet_decoder(decoded)
+        model = tf.keras.Model(input_audio, output)
+        model.summary()
 
-		model = tf.keras.Model(input_audio, output)
-		model.summary()
-
-		return model
+        return model
 
 
-	def call(self, inputs):
-		return self.model(inputs)
+    def call(self, inputs):
+        return self.model(inputs)
 
